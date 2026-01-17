@@ -94,7 +94,7 @@ shutdown_qbittorrent() {
 
 update_port() {
   echo "Retrieving forwarded port from Control Server..."
-  NEW_PORT=$(curl -s "$CONTROL_SERVER_URL/v1/openvpn/portforwarded" | jq -r '.port')
+  NEW_PORT=$(curl -s "$CONTROL_SERVER_URL/v1/portforward" | jq -r '.port')
   if [ -z "$NEW_PORT" ] || [ "$NEW_PORT" = "null" ]; then
     echo "Error retrieving forwarded port from Control Server"
     return 1
