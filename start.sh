@@ -14,6 +14,16 @@ remove_cookies() {
   rm -f "$COOKIES"
 }
 
+# Older qBittorrent answers a successful login with 200 "Ok."; 5.2.4 answers 204 with an empty body
+qbit_login() {
+  remove_cookies
+  local response status
+  response=$(curl -s -w '\n%{http_code}' -c "$COOKIES" --data "username=$QBITTORRENT_USER&password=$QBITTORRENT_PASS" \
+    "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/auth/login")
+  status="${response##*$'\n'}"
+  [ "$status" = "204" ] || { [ "$status" = "200" ] && [ "${response%$'\n'*}" = "Ok." ]; }
+}
+
 wait_for_vpn_status() {
   local desired_status="$1"
   local timeout="${WAIT_TIMEOUT}"
@@ -71,11 +81,8 @@ check_port_status() {
 
 shutdown_qbittorrent() {
   echo "Shutting down qBittorrent via WebUI API..."
-  remove_cookies
 
-  login_response=$(curl -s -c "$COOKIES" --data "username=$QBITTORRENT_USER&password=$QBITTORRENT_PASS" \
-    "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/auth/login")
-  if ! echo "$login_response" | grep -iq "Ok"; then
+  if ! qbit_login; then
     echo "Error logging into the qBittorrent Web UI"
     return 1
   fi
@@ -104,10 +111,7 @@ update_port() {
     echo "Port has not changed. Current port: $NEW_PORT. No update necessary."
 
     echo "Ensuring qBittorrent is reachable and correct port is set..."
-    remove_cookies
-    login_response=$(curl -s -c "$COOKIES" --data "username=$QBITTORRENT_USER&password=$QBITTORRENT_PASS" \
-      "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/auth/login")
-    if echo "$login_response" | grep -iq "Ok"; then
+    if qbit_login; then
       CURRENT_QBIT_PORT=$(curl -s -b "$COOKIES" "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/app/preferences" | jq -r '.listen_port')
       if [ "$CURRENT_QBIT_PORT" != "$NEW_PORT" ]; then
         echo "qBittorrent is reachable but using incorrect port: $CURRENT_QBIT_PORT (expected: $NEW_PORT)"
@@ -124,10 +128,7 @@ update_port() {
     remove_cookies
   else
     echo "Logging into qBittorrent..."
-    remove_cookies
-    login_response=$(curl -s -c "$COOKIES" --data "username=$QBITTORRENT_USER&password=$QBITTORRENT_PASS" \
-      "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/auth/login")
-    if ! echo "$login_response" | grep -iq "Ok"; then
+    if ! qbit_login; then
       echo "Error logging into the qBittorrent Web UI"
       return 1
     fi
